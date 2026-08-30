@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renomeador de Cartões de Ponto</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+:root{
+  --indigo:#4F46E5; --violeta:#7C3AED; --turquesa:#0D9488;
+  --ambar:#D97706;  --coral:#DC2626;  --verde:#059669; --rosa:#DB2777;
+  --tinta:#1E1B4B;  --texto:#3F3D56;  --suave:#7A7A96;
+  --branco:#FFFFFF; --linha:#E4E2F5;
+  --raio:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  color:var(--texto);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  background:linear-gradient(175deg,#EEF0FF 0%,#FBF2FA 42%,#EFFAF6 100%);
+  background-attachment:fixed;min-height:100vh;
+}
+.wrap{max-width:1280px;margin:0 auto;padding:28px 22px 80px}
+
+/* cabeçalho */
+header{
+  background:linear-gradient(115deg,var(--indigo) 0%,var(--violeta) 52%,var(--rosa) 100%);
+  border-radius:16px;padding:26px 28px;color:#fff;
+  box-shadow:0 12px 30px rgba(79,70,229,.26)
+}
+header h1{font-size:1.8rem;font-weight:800;letter-spacing:-.02em;margin:0 0 6px}
+header p{margin:0;opacity:.92;font-size:.95rem;max-width:64ch}
+.aviso-rede{
+  margin-top:16px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);
+  border-radius:8px;padding:10px 14px;font-size:.84rem;line-height:1.5
+}
+
+/* etapas — cada uma com sua cor */
+.etapa{margin-top:30px}
+.etapa > h2{
+  display:flex;align-items:center;gap:11px;margin:0 0 14px;
+  font-size:.8rem;text-transform:uppercase;letter-spacing:.11em;font-weight:800
+}
+.etapa > h2 .n{
+  width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+  color:#fff;font-size:.9rem;font-weight:800;flex:none
+}
+.e1 > h2{color:var(--indigo)}    .e1 > h2 .n{background:var(--indigo)}
+.e2 > h2{color:var(--turquesa)}  .e2 > h2 .n{background:var(--turquesa)}
+.e3 > h2{color:var(--ambar)}     .e3 > h2 .n{background:var(--ambar)}
+
+.painel{
+  background:var(--branco);border:1px solid var(--linha);border-radius:var(--raio);
+  padding:20px;box-shadow:0 3px 14px rgba(30,27,75,.06);position:relative;overflow:hidden
+}
+.painel::before{
+  content:"";position:absolute;inset:0 0 auto;height:4px;
+  background:linear-gradient(90deg,var(--indigo),var(--violeta),var(--rosa))
+}
+.painel.teal::before{background:linear-gradient(90deg,var(--turquesa),#22D3AA)}
+.painel.amber::before{background:linear-gradient(90deg,var(--ambar),#FBBF24)}
+.colunas{display:grid;grid-template-columns:1.55fr 1fr;gap:20px}
+@media(max-width:940px){.colunas{grid-template-columns:1fr}}
+
+/* área de arraste */
+.solte{
+  border:2.5px dashed #B9B4F0;border-radius:var(--raio);
+  background:linear-gradient(135deg,#F7F6FF,#FDF4FA);
+  padding:40px 20px;text-align:center;cursor:pointer;transition:.16s
+}
+.solte:hover,.solte.ativo{
+  border-color:var(--violeta);background:linear-gradient(135deg,#F0EEFF,#FBEBF6);
+  transform:translateY(-1px)
+}
+.solte strong{display:block;color:var(--indigo);font-size:1.06rem;font-weight:700;margin-bottom:4px}
+.solte span{color:var(--suave);font-size:.87rem}
+
+/* formulário */
+label{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--indigo);font-weight:700;margin-bottom:5px}
+input[type=text],select,input[type=number]{
+  width:100%;padding:9px 11px;border:1.5px solid var(--linha);border-radius:7px;
+  font:inherit;font-size:.9rem;background:#FCFCFF;color:var(--texto)
+}
+input:focus,select:focus{outline:none;border-color:var(--violeta);
+  box-shadow:0 0 0 3px rgba(124,58,237,.14);background:#fff}
+button:focus-visible{outline:2px solid var(--violeta);outline-offset:2px}
+.campo{margin-bottom:14px}
+.check{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;
+  font-size:.89rem;text-transform:none;letter-spacing:0;color:var(--texto);font-weight:400}
+.check input{margin-top:3px;flex:none;accent-color:var(--violeta);width:16px;height:16px}
+.dica{font-size:.8rem;color:var(--suave);margin-top:5px}
+.marcador{
+  display:inline-block;background:#EEF0FF;color:var(--indigo);border:1px solid #D6D3FA;
+  padding:2px 7px;border-radius:5px;font-size:.76rem;font-weight:600;
+  margin:0 4px 5px 0;cursor:pointer;font-family:ui-monospace,Menlo,Consolas,monospace
+}
+.marcador:hover{background:var(--indigo);color:#fff}
+
+button{
+  font:inherit;font-weight:700;font-size:.9rem;padding:10px 20px;border-radius:8px;
+  border:1.5px solid var(--linha);background:#fff;color:var(--tinta);cursor:pointer;
+  transition:.15s
+}
+button:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 12px rgba(30,27,75,.12)}
+button.principal{background:linear-gradient(120deg,var(--indigo),var(--violeta));
+  color:#fff;border:none}
+button.verde{background:linear-gradient(120deg,var(--verde),#10B981);color:#fff;border:none}
+button.excel{background:linear-gradient(120deg,#15803D,#22A85A);color:#fff;border:none}
+button.azul{background:linear-gradient(120deg,#1D4ED8,#3B82F6);color:#fff;border:none}
+button:disabled{opacity:.42;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+.acoes{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+details summary{cursor:pointer;font-size:.86rem;font-weight:700;color:var(--indigo);
+  padding:7px 0;user-select:none;list-style:none}
+details summary::marker{content:""}
+details summary::before{content:"\25B8 ";display:inline-block;transition:.15s}
+details[open] summary::before{transform:rotate(90deg)}
+details[open] summary{margin-bottom:12px}
+hr.sep{border:none;border-top:1px dashed var(--linha);margin:14px 0}
+
+/* progresso */
+#progresso{margin-top:16px;display:none}
+.barra{height:8px;background:#E9E7FA;border-radius:5px;overflow:hidden}
+.barra i{display:block;height:100%;width:0;transition:width .25s;
+  background:linear-gradient(90deg,var(--indigo),var(--rosa))}
+#progressoTexto{font-size:.84rem;color:var(--indigo);margin-top:8px;font-weight:600;
+  font-variant-numeric:tabular-nums}
+
+/* placar */
+.placar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.pastilha{
+  border-radius:var(--raio);padding:12px 18px;min-width:120px;color:#fff;
+  box-shadow:0 5px 16px rgba(30,27,75,.14)
+}
+.pastilha b{display:block;font-size:1.7rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.pastilha span{font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;opacity:.94}
+.p-total{background:linear-gradient(125deg,var(--indigo),var(--violeta))}
+.p-ok{background:linear-gradient(125deg,var(--verde),#22C58A)}
+.p-rev{background:linear-gradient(125deg,var(--ambar),#F0A824)}
+.p-err{background:linear-gradient(125deg,var(--coral),#EF5350)}
+
+/* tabela */
+.rolagem{overflow-x:auto;background:#fff;border:1px solid var(--linha);
+  border-radius:var(--raio);box-shadow:0 3px 14px rgba(30,27,75,.06)}
+table{border-collapse:collapse;width:100%;min-width:1080px}
+th{
+  text-align:left;font-size:.69rem;text-transform:uppercase;letter-spacing:.08em;
+  color:#fff;font-weight:700;padding:12px;white-space:nowrap;
+  background:linear-gradient(100deg,var(--indigo),var(--violeta))
+}
+td{padding:9px 12px;border-bottom:1px solid #F0EEFB;vertical-align:middle;font-size:.9rem}
+tbody tr{border-left:4px solid transparent}
+tbody tr:nth-child(even){background:#FBFAFF}
+tbody tr:hover{background:#F5F3FF}
+tr.ok{border-left-color:var(--verde)}
+tr.rev{border-left-color:var(--ambar)}
+tr.err{border-left-color:var(--coral)}
+td input{padding:7px 9px;font-size:.88rem}
+td.origem{color:var(--suave);font-size:.83rem;max-width:170px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+td.novo{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.82rem;color:var(--indigo);font-weight:600;word-break:break-all;max-width:250px}
+
+/* carimbo de status */
+.carimbo{
+  display:inline-block;font-size:.67rem;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;padding:4px 9px;border-radius:4px;border:2px solid;
+  transform:rotate(-2deg);white-space:nowrap
+}
+.carimbo.ok{color:var(--verde);border-color:var(--verde);background:#E9FBF3}
+.carimbo.rev{color:var(--ambar);border-color:var(--ambar);background:#FEF6E7}
+.carimbo.err{color:var(--coral);border-color:var(--coral);background:#FDEDED}
+
+.avisos{font-size:.77rem;color:var(--suave);max-width:220px}
+.salvo{font-size:.64rem;font-weight:700;color:var(--turquesa);margin-top:4px;
+  text-transform:uppercase;letter-spacing:.06em}
+.linkTexto{background:none;border:none;color:var(--violeta);text-decoration:underline;
+  cursor:pointer;font-size:.77rem;padding:0;font-weight:600}
+.linkTexto:hover{box-shadow:none;transform:none}
+
+.vazio{color:var(--suave);font-size:.9rem;padding:26px;text-align:center;background:#fff;
+  border:2px dashed var(--linha);border-radius:var(--raio)}
+
+dialog{border:none;border-radius:14px;padding:0;max-width:780px;width:92vw;
+  box-shadow:0 20px 60px rgba(30,27,75,.35)}
+dialog::backdrop{background:rgba(30,27,75,.5)}
+.modalTopo{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;
+  background:linear-gradient(100deg,var(--indigo),var(--violeta));color:#fff}
+.modalTopo h3{margin:0;font-size:1rem}
+.modalTopo button{background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4)}
+dialog pre{margin:0;padding:18px;max-height:58vh;overflow:auto;white-space:pre-wrap;
+  font-size:.82rem;line-height:1.5;color:var(--texto);background:#FCFCFF}
+
+.recado{padding:11px 15px;border-radius:8px;font-size:.88rem;margin-top:12px;font-weight:500}
+.recado.bom{background:#E9FBF3;border-left:4px solid var(--verde);color:#046C4A}
+.recado.ruim{background:#FDEDED;border-left:4px solid var(--coral);color:#9B1C1C}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Renomeador de Cartões de Ponto</h1>
+  <p>Leia os cartões digitalizados, confira matrícula, funcionário e competência,
+     e grave tudo com o nome padronizado.</p>
+  <div class="aviso-rede">
+    Os documentos são lidos dentro do próprio navegador e não são enviados a lugar
+    nenhum. A internet é usada só na primeira execução, para baixar o motor de OCR
+    e o dicionário do português (~15&nbsp;MB, guardado em cache).
+  </div>
+</header>
+
+<!-- ETAPA 1 -->
+<section class="etapa e1">
+  <h2><span class="n">1</span> Documentos</h2>
+  <div class="colunas">
+    <div>
+      <div class="solte" id="solte">
+        <strong>Arraste os PDFs ou imagens aqui</strong>
+        <span>ou clique para escolher — PDF, PNG, JPG, TIFF, BMP e WEBP</span>
+      </div>
+      <input type="file" id="entrada" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" hidden>
+      <div id="listaArquivos" class="dica" style="margin-top:10px"></div>
+
+      <div style="margin-top:14px">
+        <label class="check">
+          <input type="checkbox" id="dividir">
+          <span>Cada página do PDF é o cartão de um funcionário diferente</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="agrupar" checked>
+          <span>Agrupar páginas sem identificação (só resumo de horas) ao cartão
+                anterior — o espelho sai com as duas páginas em um único arquivo</span>
+        </label>
+        <div class="acoes">
+          <button class="principal" id="btnLer" disabled>Ler documentos</button>
+          <button id="btnContinuar" hidden>Continuar de onde parou</button>
+          <button id="btnLimpar">Limpar lista</button>
+        </div>
+
+        <div class="painel teal" style="margin-top:14px;padding:14px">
+          <label class="check" style="margin-bottom:8px">
+            <input type="checkbox" id="autosave" checked>
+            <span><b>Gravar cada cartão assim que ficar pronto.</b> Se a página
+              travar no meio do lote, o que já foi lido continua salvo no disco
+              e a leitura recomeça de onde parou.</span>
+          </label>
+          <div class="acoes">
+            <button id="btnPastaDestino">Escolher pasta de destino</button>
+            <span class="dica" id="pastaEscolhida" style="margin:0">
+              nenhuma pasta escolhida
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div id="progresso">
+        <div class="barra"><i id="barraPreenchida"></i></div>
+        <div id="progressoTexto"></div>
+      </div>
+      <div id="recadoLeitura"></div>
+    </div>
+
+    <div class="painel">
+      <details open>
+        <summary>Padrão de nome</summary>
+        <div class="campo">
+          <label for="modelo">Modelo do nome do arquivo</label>
+          <input type="text" id="modelo" value="{MATRICULA}_{NOME}_{MM}-{AAAA}">
+        </div>
+        <div class="campo">
+          <label for="separador">Separador de palavras</label>
+          <select id="separador"><option>_</option><option>-</option></select>
+        </div>
+        <div class="dica" id="exemploNome"></div>
+        <hr class="sep">
+        <div class="dica" style="margin-bottom:6px">Clique para inserir no modelo:</div>
+        <div id="marcadores"></div>
+      </details>
+
+      <hr class="sep">
+
+      <details>
+        <summary>Leitura e OCR</summary>
+        <div class="campo">
+          <label for="idioma">Idioma</label>
+          <select id="idioma">
+            <option value="por">Português</option>
+            <option value="por+eng">Português + inglês</option>
+            <option value="eng">Inglês</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="escala">Resolução de renderização</label>
+          <select id="escala">
+            <option value="1.5">Baixa — mais rápida</option>
+            <option value="2" selected>Média (recomendada)</option>
+            <option value="3">Alta — digitalizações ruins</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="psm">Segmentação de página</label>
+          <select id="psm">
+            <option value="6" selected>6 — bloco uniforme (formulários)</option>
+            <option value="4">4 — colunas de texto</option>
+            <option value="3">3 — automática</option>
+            <option value="11">11 — texto esparso</option>
+            <option value="12">12 — texto esparso com orientação</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="maxPaginas">Páginas lidas por documento</label>
+          <input type="number" id="maxPaginas" value="1" min="1" max="20">
+          <div class="dica">Matrícula, nome e competência costumam estar na primeira página.</div>
+        </div>
+        <label class="check"><input type="checkbox" id="forcarOcr">
+          <span>Sempre usar OCR (ignorar o texto nativo do PDF)</span></label>
+        <label class="check"><input type="checkbox" id="corrigirInclinacao" checked>
+          <span>Corrigir inclinação da digitalização</span></label>
+        <label class="check"><input type="checkbox" id="binarizar" checked>
+          <span>Binarizar imagem antes do OCR</span></label>
+        <label class="check"><input type="checkbox" id="detectarGiro">
+          <span>Detectar páginas giradas (bem mais lento — testa 4 orientações)</span></label>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ETAPA 2 -->
+<section class="etapa e2">
+  <h2><span class="n">2</span> Conferência</h2>
+  <div id="placar" class="placar" hidden></div>
+  <div id="areaTabela"><div class="vazio">Nenhum documento lido ainda.</div></div>
+  <div class="recado bom" id="notaAgrupamento" hidden></div>
+  <div class="dica" id="notaTabela" hidden style="margin-top:10px">
+    Corrija matrícula, funcionário ou competência direto na tabela — a prévia do
+    novo nome é recalculada a cada alteração. Competência no formato <code>MM/AAAA</code>.
+  </div>
+</section>
+
+<!-- ETAPA 3 -->
+<section class="etapa e3" id="etapaSaida" hidden>
+  <h2><span class="n">3</span> Gravar e relatório</h2>
+  <div class="painel amber">
+    <label class="check"><input type="checkbox" id="incluirFalhas">
+      <span>Incluir também os documentos com falha, mantendo o nome parcial</span></label>
+    <div class="acoes" style="margin-top:14px">
+      <button class="verde" id="btnPasta">Salvar em uma pasta</button>
+      <button class="azul" id="btnZip">Baixar tudo em .zip</button>
+      <button class="excel" id="btnExcel">Relatório em Excel</button>
+      <button id="btnCsv">Relatório em CSV</button>
+    </div>
+    <div class="dica" style="margin-top:10px" id="notaPasta"></div>
+    <div id="recadoSaida"></div>
+  </div>
+  <div id="pendencias" style="margin-top:18px"></div>
+</section>
+
+</div>
+
+<dialog id="modalTexto">
+  <div class="modalTopo">
+    <h3 id="modalTitulo">Texto reconhecido</h3>
+    <button onclick="document.getElementById('modalTexto').close()">Fechar</button>
+  </div>
+  <pre id="modalCorpo"></pre>
+</dialog>
+
+<script>
+"use strict";
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+const $ = (id) => document.getElementById(id);
+const EXTENSOES = ["pdf","png","jpg","jpeg","tif","tiff","bmp","webp"];
+const MIN_TEXTO_NATIVO = 180;
+
+const STATUS = { OK:"Pronto", REV:"Revisar", ERR:"Falha" };
+const CLASSE = { [STATUS.OK]:"ok", [STATUS.REV]:"rev", [STATUS.ERR]:"err" };
+
+let arquivos = [];
+let registros = [];
+let paginasAgrupadas = 0;
+let pastaDestino = null;      // handle da pasta escolhida, quando disponível
+let processando = false;
+let ultimoErroLote = "";
+let worker = null;
+
+/* ========================================================================== *
+ * 1. Normalização de texto
+ * ========================================================================== */
+const semAcento = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+function normalizar(t){
+  return semAcento(t).toUpperCase()
+    .replace(/\u00a0/g," ").replace(/\|/g," ")
+    .split("\n").map(l => l.replace(/[ \t]+/g," ").trim())
+    .filter(Boolean).join("\n");
+}
+
+/* ========================================================================== *
+ * 2. Extração: matrícula, nome e competência
+ * ========================================================================== */
+const MESES = {
+  JANEIRO:1,JAN:1, FEVEREIRO:2,FEV:2, MARCO:3,MAR:3, ABRIL:4,ABR:4,
+  MAIO:5,MAI:5, JUNHO:6,JUN:6, JULHO:7,JUL:7, AGOSTO:8,AGO:8,
+  SETEMBRO:9,SET:9, OUTUBRO:10,OUT:10, NOVEMBRO:11,NOV:11, DEZEMBRO:12,DEZ:12
+};
+const MES_EXTENSO = ["","JANEIRO","FEVEREIRO","MARCO","ABRIL","MAIO","JUNHO",
+  "JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+
+const NOME_ROTULOS = [
+  "NOME\\s+DO\\s+(?:FUNCIONARIO|COLABORADOR|EMPREGADO|SERVIDOR)",
+  "FUNCIONARIO","COLABORADOR","EMPREGADO","SERVIDOR",
+  "NOME\\s+COMPLETO","NOME"
+];
+const COMP_ROTULOS =
+  "(?:COMPETENCIA|REFERENCIA|MES\\s*\\/?\\s*ANO|MES\\s+DE\\s+REFERENCIA|PERIODO|FOLHA)";
+
+/* Rótulos de matrícula, do mais específico para o mais genérico. */
+const MATRICULA_ROTULOS = [
+  ["MATRICULA", 95], ["MATRIC", 92], ["MATR", 90],
+  ["CHAPA", 88], ["CRACHA", 86],
+  ["CODIGO\\s+DO\\s+(?:FUNCIONARIO|COLABORADOR|EMPREGADO)", 88],
+  ["REGISTRO\\s+DO\\s+(?:FUNCIONARIO|COLABORADOR|EMPREGADO)", 86],
+  ["MAT", 78], ["RE", 70]
+];
+
+const CORTES = ["CARGO","FUNCAO","MATRICULA","MATRIC","MATR","CHAPA","CRACHA",
+  "ADMISSAO","CPF","PIS","CTPS","RG","SETOR","DEPARTAMENTO","LOTACAO","HORARIO",
+  "JORNADA","SALARIO","COMPETENCIA","REFERENCIA","PERIODO","EMPRESA","CNPJ",
+  "FILIAL","CODIGO","DEPTO","TURNO","ESCALA","CBO","CENTRO DE CUSTO"];
+
+const RUIDO = ["CARTAO DE PONTO","CARTAO PONTO","FOLHA DE PONTO","REGISTRO DE PONTO",
+  "CONTROLE DE FREQUENCIA","ESPELHO DE PONTO","LTDA","EIRELI","S/A","S.A","CNPJ",
+  "INSCRICAO","ENDERECO","RUA ","AVENIDA","TOTAL","ASSINATURA","RESUMO",
+  "OCORRENCIAS","ENTRADA","SAIDA","EXTRA","FALTA","ATRASO","DSR",
+  "BANCO DE HORAS","OBSERVACOES",
+  // vocabulário do resumo de horas — aparece nas páginas de continuação
+  "HORA EXTRA","HORAS PREVISTAS","HORAS TRABALHADAS","ABONO","ATESTADO",
+  "OUTROS","BATIDAS","AJUSTES","RESULTADO","LOCALIZACAO","VISITA FAMILIAR",
+  "INSERIDO","EMISSAO","PORTARIA"];
+
+/* Termos que provam que a página tem cabeçalho de identificação. Se nenhum
+   deles aparece no topo, a página é a continuação do cartão anterior. */
+const MARCAS_DE_IDENTIFICACAO =
+  /MATRICULA|MATRIC|CHAPA|CRACHA|\bCPF\b|\bPIS\b|ADMISSAO|COMPETENCIA|ESPELHO|FUNCIONARIO|COLABORADOR|EMPREGADO|CARGO|DEPARTAMENTO/;
+
+const DIAS_SEMANA = ["SEG","TER","QUA","QUI","SEX","SAB","DOM"];
+const PALAVRAS_ROTULO = ["COLABORADOR","FUNCIONARIO","EMPREGADO","SERVIDOR","NOME"];
+
+/* ---- matrícula ---- */
+function extraiMatricula(texto){
+  const avisos = [];
+  for (const [rotulo, peso] of MATRICULA_ROTULOS){
+    // Exige dígitos logo após o rótulo, o que descarta "REGISTRO DE PONTO".
+    // O segundo grupo captura uma letra colada no número: "52486" lido como
+    // "524G" significa número truncado, não matrícula curta.
+    const re = new RegExp("\\b" + rotulo +
+      "\\b[\\s:.\\-N\u00ba\u00b0]{0,4}(\\d[\\d.\\-]{1,13})([A-Z])?");
+    const m = texto.match(re);
+    if (m){
+      const valor = m[1].replace(/[^\d]/g,"");
+      if (valor.length < 2 || valor.length > 12) continue;
+      if (m[2]){
+        avisos.push(`Matrícula possivelmente truncada pelo OCR (lido "${m[1]}${m[2]}") — confira.`);
+        return { matricula: valor, peso: 55, avisos };
+      }
+      if (valor.length < 3){
+        avisos.push("Matrícula muito curta — confira.");
+        return { matricula: valor, peso: 60, avisos };
+      }
+      return { matricula: valor, peso, avisos };
+    }
+  }
+  avisos.push("Matrícula não localizada.");
+  return { matricula:null, peso:0, avisos };
+}
+
+/* ---- nome ---- */
+function limpaNome(bruto){
+  let c = bruto.replace(/^[\s:\-\u2013.\t]+|[\s:\-\u2013.\t]+$/g,"");
+  for (const corte of CORTES){
+    const pos = c.indexOf(corte);
+    if (pos > 0) c = c.slice(0,pos);
+  }
+  c = c.replace(/\d/g," ").replace(/[^A-Z\s']/g," ").replace(/\s+/g," ").trim();
+  return c.split(" ").filter(p => p.length > 1 || p === "E").join(" ").trim();
+}
+
+function nomeValido(c){
+  if (!c || c.length < 5) return false;
+  const partes = c.split(" ");
+  if (partes.length < 2) return false;
+  if (RUIDO.some(r => c.includes(r))) return false;
+  if (PALAVRAS_ROTULO.some(p => partes.includes(p))) return false;
+  if (partes.reduce((s,p)=>s+p.length,0)/partes.length < 2) return false;
+  return true;
+}
+
+function extraiNome(texto){
+  const linhas = texto.split("\n");
+  const avisos = [];
+
+  /* Regra 0 — espelhos em que o nome não tem rótulo nenhum: ele vem sozinho,
+     em destaque, na linha logo acima de "MATRÍCULA". Sem esta regra o nome só
+     seria pego por heurística fraca e todo cartão cairia em "Revisar". */
+  for (let i = 0; i < linhas.length; i++){
+    if (!/\b(?:MATRICULA|MATRIC|MATR|CHAPA|CRACHA)\b/.test(linhas[i])) continue;
+    // Nome na mesma linha, antes do rótulo (limpaNome corta no rótulo).
+    let cand = limpaNome(linhas[i]);
+    if (nomeValido(cand)) return { nome:cand, peso:90, avisos };
+    // Nome sozinho em uma das duas linhas acima.
+    for (let k = 1; k <= 2 && i - k >= 0; k++){
+      cand = limpaNome(linhas[i-k]);
+      if (nomeValido(cand)) return { nome:cand, peso:92, avisos };
+    }
+  }
+
+  let peso = 95;
+
+  for (const rotulo of NOME_ROTULOS){
+    const re = new RegExp("\\b" + rotulo + "\\b\\s*[:\\-\u2013]?\\s*(.*)");
+    for (let i = 0; i < linhas.length; i++){
+      const m = linhas[i].match(re);
+      if (!m) continue;
+      let cand = limpaNome(m[1] || "");
+      if (nomeValido(cand)) return { nome:cand, peso, avisos };
+      if (i + 1 < linhas.length){
+        cand = limpaNome(linhas[i+1]);
+        if (nomeValido(cand)) return { nome:cand, peso:Math.max(peso-15,30), avisos };
+      }
+    }
+    peso -= 8;
+  }
+
+  for (const linha of linhas.slice(0,15)){
+    if (DIAS_SEMANA.some(d => linha.includes(d))) continue;
+    const cand = limpaNome(linha);
+    if (nomeValido(cand) && cand.split(" ").length >= 3){
+      avisos.push("Nome deduzido sem rótulo — confira antes de aplicar.");
+      return { nome:cand, peso:35, avisos };
+    }
+  }
+
+  avisos.push("Nome do funcionário não localizado.");
+  return { nome:null, peso:0, avisos };
+}
+
+/* ---- competência ---- */
+const valida = (m,a) => m >= 1 && m <= 12 && a >= 1990 && a <= 2100;
+const anoCheio = (a) => a > 100 ? a : (a < 80 ? 2000 + a : 1900 + a);
+
+function extraiCompetencia(texto){
+  const avisos = [], cands = [];
+  const push = (p,m,a) => { if (valida(m,a)) cands.push([p,m,a]); };
+  const todos = (re, fn) => { let m; re.lastIndex = 0; while ((m = re.exec(texto)) !== null) fn(m); };
+
+  todos(new RegExp(COMP_ROTULOS + "[^A-Z0-9]{0,12}([A-Z]{3,9})\\s*(?:DE\\s*|\\/|-)?\\s*(\\d{2,4})","g"),
+    m => { const mes = MESES[m[1]]; if (mes) push(95, mes, anoCheio(+m[2])); });
+
+  // O lookahead evita capturar "01/09" de "Período: 01/09/2025".
+  todos(new RegExp(COMP_ROTULOS + "[^0-9]{0,12}(\\d{1,2})\\s*[\\/\\-.]\\s*(\\d{4})(?![\\/\\-.]?\\d)","g"),
+    m => push(90, +m[1], +m[2]));
+
+  todos(new RegExp(COMP_ROTULOS + "[^0-9]{0,12}(\\d{1,2})\\s*[\\/\\-.]\\s*(\\d{2})(?![\\/\\-.]?\\d)","g"),
+    m => push(80, +m[1], anoCheio(+m[2])));
+
+  todos(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\s*(?:A|ATE|AT|-|\u2013)\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/g,
+    m => push(85, +m[2], anoCheio(+m[3])));
+
+  todos(/\b([A-Z]{3,9})\s*(?:DE\s*|\/|-)\s*(\d{4})\b/g,
+    m => { const mes = MESES[m[1]]; if (mes) push(70, mes, +m[2]); });
+
+  todos(/\b(\d{1,2})\s*[\/\-.]\s*(20\d{2})\b/g, m => push(50, +m[1], +m[2]));
+
+  const freq = {};
+  todos(/\b\d{1,2}[\/\-.](\d{1,2})[\/\-.](20\d{2})\b/g, m => {
+    const mes = +m[1], ano = +m[2];
+    if (valida(mes,ano)){ const k = mes+"|"+ano; freq[k] = (freq[k]||0)+1; }
+  });
+  const melhor = Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
+  if (melhor && melhor[1] >= 5){
+    const [mes,ano] = melhor[0].split("|").map(Number);
+    push(60, mes, ano);
+  }
+
+  if (!cands.length){
+    avisos.push("Competência não localizada.");
+    return { mes:null, ano:null, peso:0, avisos };
+  }
+  cands.sort((a,b)=>b[0]-a[0]);
+  const [peso,mes,ano] = cands[0];
+  if (peso < 70) avisos.push("Competência deduzida por aproximação — confira antes de aplicar.");
+  return { mes, ano, peso, avisos };
+}
+
+function extrair(textoBruto){
+  const texto = normalizar(textoBruto);
+  const mat = extraiMatricula(texto);
+  const n = extraiNome(texto);
+  const c = extraiCompetencia(texto);
+  return {
+    matricula:mat.matricula, pesoMat:mat.peso,
+    nome:n.nome, pesoNome:n.peso,
+    mes:c.mes, ano:c.ano, pesoComp:c.peso,
+    avisos:[...mat.avisos, ...n.avisos, ...c.avisos]
+  };
+}
+
+/* ========================================================================== *
+ * 3. Nome do arquivo
+ * ========================================================================== */
+const MARCADORES = {
+  "{MATRICULA}":"matrícula do funcionário",
+  "{NOME}":"nome padronizado",
+  "{MM}":"mês (05)",
+  "{AAAA}":"ano (2026)",
+  "{AA}":"ano (26)",
+  "{MES}":"mês por extenso",
+  "{AAAAMM}":"202605",
+  "{ORIGINAL}":"nome original do arquivo",
+  "{PAGINA}":"número da página"
+};
+
+function sanitizar(texto, sep="_"){
+  if (!texto) return "";
+  return semAcento(texto).toUpperCase()
+    .replace(/['\u2019\u00b4`]/g,"")
+    .replace(/[^A-Z0-9\s\-]/g," ")
+    .replace(/\s+/g," ").trim()
+    .split(" ").join(sep)
+    .replace(new RegExp("\\" + sep + "{2,}","g"), sep)
+    .replace(new RegExp("^[" + sep + "\\-]+|[" + sep + "\\-]+$","g"),"");
+}
+
+function montaNome(o){
+  const sep = o.sep || "_";
+  const v = {
+    "{MATRICULA}": o.matricula ? sanitizar(o.matricula, sep) : "SEM" + sep + "MATRICULA",
+    "{NOME}": sanitizar(o.nome || "SEM NOME", sep),
+    "{MM}": o.mes ? String(o.mes).padStart(2,"0") : "MM",
+    "{AAAA}": o.ano ? String(o.ano) : "AAAA",
+    "{AA}": o.ano ? String(o.ano).slice(-2) : "AA",
+    "{MES}": o.mes ? MES_EXTENSO[o.mes] : "MES",
+    "{AAAAMM}": (o.mes && o.ano) ? `${o.ano}${String(o.mes).padStart(2,"0")}` : "AAAAMM",
+    "{ORIGINAL}": sanitizar(o.original, sep),
+    "{PAGINA}": o.pagina ? String(o.pagina).padStart(2,"0") : ""
+  };
+  let r = o.modelo;
+  for (const k of Object.keys(v)) r = r.split(k).join(v[k]);
+  r = r.replace(new RegExp("\\" + sep + "{2,}","g"), sep)
+       .replace(new RegExp("^[" + sep + "\\-]+|[" + sep + "\\-]+$","g"),"")
+       .replace(/[<>:"/\\|?*]/g,"")
+       .replace(/^[\s.]+|[\s.]+$/g,"")
+       .slice(0,180) || "SEM_NOME";
+  const ext = o.extensao.startsWith(".") ? o.extensao : "." + o.extensao;
+  return r + ext.toLowerCase();
+}
+
+function aplicaUnicidade(lista){
+  const usados = new Set();
+  for (const r of lista){
+    if (!r.novoNome) continue;
+    let nome = r.novoNome;
+    if (usados.has(nome)){
+      const i = nome.lastIndexOf(".");
+      const base = nome.slice(0,i), ext = nome.slice(i);
+      let n = 2;
+      while (usados.has(`${base}_${n}${ext}`)) n++;
+      nome = `${base}_${n}${ext}`;
+      if (!r.avisos.includes("Nome duplicado no lote — sufixo numérico aplicado."))
+        r.avisos.push("Nome duplicado no lote — sufixo numérico aplicado.");
+    }
+    r.novoNome = nome;
+    usados.add(nome);
+  }
+}
+
+/* ========================================================================== *
+ * 4. Imagem: renderização e pré-processamento
+ * ========================================================================== */
+/* Um PDF grande custa caro para abrir. Sem cache, um lote de 108 páginas
+   recarregaria o arquivo inteiro centenas de vezes e estouraria a memória da
+   aba — que é justamente o "erro na página" que faz perder o trabalho. */
+const cacheLeitura = new Map();   // File -> documento do pdf.js
+const cacheEscrita = new Map();   // File -> documento do pdf-lib
+
+async function paginasDoPdf(file){
+  if (!cacheLeitura.has(file)){
+    const buf = await file.arrayBuffer();
+    cacheLeitura.set(file, await pdfjsLib.getDocument({ data: buf }).promise);
+  }
+  return cacheLeitura.get(file);
+}
+
+async function pdfParaEscrita(file){
+  if (!cacheEscrita.has(file))
+    cacheEscrita.set(file, await PDFLib.PDFDocument.load(await file.arrayBuffer()));
+  return cacheEscrita.get(file);
+}
+
+function liberaCacheLeitura(){
+  for (const doc of cacheLeitura.values()){
+    try { doc.destroy(); } catch (e) { /* já liberado */ }
+  }
+  cacheLeitura.clear();
+}
+
+async function renderizaPagina(doc, numero, escala){
+  const page = await doc.getPage(numero);
+  const viewport = page.getViewport({ scale: escala * 1.4 });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx = canvas.getContext("2d", { willReadFrequently:true });
+  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas;
+}
+
+function canvasDaImagem(file, escala){
+  return new Promise((resolve,reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const fator = img.width < 1400 ? escala : 1;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * fator);
+      canvas.height = Math.round(img.height * fator);
+      const ctx = canvas.getContext("2d", { willReadFrequently:true });
+      ctx.fillStyle = "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      resolve(canvas);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Imagem ilegível.")); };
+    img.src = url;
+  });
+}
+
+function paraCinza(canvas){
+  const ctx = canvas.getContext("2d", { willReadFrequently:true });
+  const d = ctx.getImageData(0,0,canvas.width,canvas.height), p = d.data;
+  for (let i = 0; i < p.length; i += 4){
+    const y = (p[i]*0.299 + p[i+1]*0.587 + p[i+2]*0.114) | 0;
+    p[i] = p[i+1] = p[i+2] = y;
+  }
+  ctx.putImageData(d,0,0);
+  return canvas;
+}
+
+function limiarOtsu(cinza){
+  const hist = new Array(256).fill(0);
+  for (let i = 0; i < cinza.length; i++) hist[cinza[i]]++;
+  const total = cinza.length;
+  let soma = 0; for (let t = 0; t < 256; t++) soma += t * hist[t];
+  let somaB = 0, wB = 0, melhor = 0, limiar = 128;
+  for (let t = 0; t < 256; t++){
+    wB += hist[t]; if (!wB) continue;
+    const wF = total - wB; if (!wF) break;
+    somaB += t * hist[t];
+    const mB = somaB / wB, mF = (soma - somaB) / wF;
+    const entre = wB * wF * (mB - mF) * (mB - mF);
+    if (entre > melhor){ melhor = entre; limiar = t; }
+  }
+  return limiar;
+}
+
+/* Inclinação pelo perfil de projeção: em página alinhada as linhas de texto
+   concentram os pixels escuros em poucas faixas, maximizando a variação. */
+function estimaInclinacao(canvas){
+  const largura = 500, fator = largura / canvas.width;
+  if (fator >= 1) return 0;
+  const alturaP = Math.max(1, Math.round(canvas.height * fator));
+  const pequeno = document.createElement("canvas");
+  pequeno.width = largura; pequeno.height = alturaP;
+  const pctx = pequeno.getContext("2d", { willReadFrequently:true });
+  pctx.drawImage(canvas, 0, 0, largura, alturaP);
+  const d = pctx.getImageData(0,0,largura,alturaP).data;
+
+  const cinza = new Uint8Array(largura * alturaP);
+  for (let i = 0, j = 0; i < d.length; i += 4, j++)
+    cinza[j] = (d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114) | 0;
+  const limiar = limiarOtsu(cinza);
+  const escuro = new Uint8Array(cinza.length);
+  for (let j = 0; j < cinza.length; j++) escuro[j] = cinza[j] < limiar ? 1 : 0;
+
+  let melhorAngulo = 0, melhorNota = -1;
+  for (let g = -6; g <= 6; g += 0.5){
+    const tan = Math.tan(g * Math.PI / 180);
+    const perfil = new Float64Array(alturaP + 40);
+    for (let y = 0; y < alturaP; y++){
+      const base = y * largura;
+      for (let x = 0; x < largura; x++){
+        if (!escuro[base + x]) continue;
+        const linha = Math.round(y + (x - largura/2) * tan) + 20;
+        if (linha >= 0 && linha < perfil.length) perfil[linha]++;
+      }
+    }
+    let nota = 0;
+    for (let i = 1; i < perfil.length; i++){
+      const dif = perfil[i] - perfil[i-1];
+      nota += dif * dif;
+    }
+    if (nota > melhorNota){ melhorNota = nota; melhorAngulo = g; }
+  }
+  return Math.abs(melhorAngulo) < 0.4 ? 0 : melhorAngulo;
+}
+
+function rotaciona(canvas, graus){
+  const rad = graus * Math.PI / 180;
+  const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+  const larg = Math.ceil(canvas.width * cos + canvas.height * sin);
+  const alt  = Math.ceil(canvas.width * sin + canvas.height * cos);
+  const saida = document.createElement("canvas");
+  saida.width = larg; saida.height = alt;
+  const ctx = saida.getContext("2d", { willReadFrequently:true });
+  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,larg,alt);
+  ctx.translate(larg/2, alt/2);
+  ctx.rotate(rad);
+  ctx.drawImage(canvas, -canvas.width/2, -canvas.height/2);
+  return saida;
+}
+
+function binariza(canvas){
+  const ctx = canvas.getContext("2d", { willReadFrequently:true });
+  const d = ctx.getImageData(0,0,canvas.width,canvas.height), p = d.data;
+  const cinza = new Uint8Array(p.length / 4);
+  for (let i = 0, j = 0; i < p.length; i += 4, j++) cinza[j] = p[i];
+  const limiar = limiarOtsu(cinza);
+  for (let i = 0, j = 0; i < p.length; i += 4, j++){
+    const v = cinza[j] < limiar ? 0 : 255;
+    p[i] = p[i+1] = p[i+2] = v; p[i+3] = 255;
+  }
+  ctx.putImageData(d,0,0);
+  return canvas;
+}
+
+/* Fração da página ocupada pelo cabeçalho e limite de tinta abaixo do qual
+   consideramos que ele está ausente. Num espelho completo o topo tem 8–10%
+   de pixels escuros; numa página só com o resumo de horas, menos de 1%. */
+const FAIXA_TOPO = 0.30;
+const LIMIAR_TOPO = 3.0;
+
+function densidadeTopo(canvas){
+  const largura = 400;
+  const fator = Math.min(1, largura / canvas.width);
+  const l = Math.max(1, Math.round(canvas.width * fator));
+  const a = Math.max(1, Math.round(canvas.height * fator * FAIXA_TOPO));
+  const p = document.createElement("canvas");
+  p.width = l; p.height = a;
+  const ctx = p.getContext("2d", { willReadFrequently:true });
+  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,l,a);
+  ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height * FAIXA_TOPO, 0, 0, l, a);
+  const d = ctx.getImageData(0,0,l,a).data;
+  let escuros = 0, total = 0;
+  for (let i = 0; i < d.length; i += 4){
+    const y = (d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114) | 0;
+    if (y < 160) escuros++;
+    total++;
+  }
+  return total ? (escuros / total) * 100 : 0;
+}
+
+function recorteTopo(canvas){
+  const a = Math.max(1, Math.round(canvas.height * FAIXA_TOPO));
+  const c = document.createElement("canvas");
+  c.width = canvas.width; c.height = a;
+  const ctx = c.getContext("2d", { willReadFrequently:true });
+  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,c.width,a);
+  ctx.drawImage(canvas, 0, 0, canvas.width, a, 0, 0, canvas.width, a);
+  return c;
+}
+
+function prepara(canvas, cfg){
+  paraCinza(canvas);
+  if (cfg.corrigirInclinacao){
+    const angulo = estimaInclinacao(canvas);
+    if (angulo) canvas = paraCinza(rotaciona(canvas, -angulo));
+  }
+  if (cfg.binarizar) binariza(canvas);
+  return canvas;
+}
+
+/* ========================================================================== *
+ * 5. OCR
+ * ========================================================================== */
+async function pegaWorker(cfg, aoProgredir){
+  if (worker && worker.__lang === cfg.idioma){
+    await worker.setParameters({ tessedit_pageseg_mode: String(cfg.psm) });
+    return worker;
+  }
+  if (worker){ await worker.terminate(); worker = null; }
+  aoProgredir("Baixando o dicionário do OCR (só na primeira vez)…");
+  worker = await Tesseract.createWorker(cfg.idioma, 1, {
+    logger: (m) => {
+      if (m.status === "recognizing text" && typeof m.progress === "number")
+        aoProgredir(`Reconhecendo texto… ${Math.round(m.progress*100)}%`);
+      else if (m.status && m.status.indexOf("loading") >= 0)
+        aoProgredir("Preparando o motor de OCR…");
+    }
+  });
+  worker.__lang = cfg.idioma;
+  await worker.setParameters({ tessedit_pageseg_mode: String(cfg.psm) });
+  return worker;
+}
+
+async function ocr(canvas, cfg, aoProgredir){
+  try {
+    const w = await pegaWorker(cfg, aoProgredir);
+    const r = await w.recognize(canvas);
+    return { texto: r.data.text || "", confianca: r.data.confidence || 0 };
+  } catch (e){
+    // O motor de OCR às vezes morre num lote longo. Recria e tenta uma vez
+    // mais, para que uma página ruim não derrube o processamento inteiro.
+    aoProgredir("Motor de OCR reiniciando…");
+    try { if (worker) await worker.terminate(); } catch (e2) { /* já morto */ }
+    worker = null;
+    const w = await pegaWorker(cfg, aoProgredir);
+    const r = await w.recognize(canvas);
+    return { texto: r.data.text || "", confianca: r.data.confidence || 0 };
+  }
+}
+
+async function melhorOrientacao(canvas, cfg, aoProgredir){
+  const largura = 900, fator = Math.min(1, largura / canvas.width);
+  const teste = document.createElement("canvas");
+  teste.width = Math.round(canvas.width * fator);
+  teste.height = Math.round(canvas.height * fator);
+  teste.getContext("2d").drawImage(canvas,0,0,teste.width,teste.height);
+
+  let melhor = { giro:0, nota:-1 };
+  for (const giro of [0,90,180,270]){
+    aoProgredir(`Testando orientação ${giro}°…`);
+    const c = giro ? rotaciona(teste, giro) : teste;
+    const r = await ocr(c, cfg, () => {});
+    const letras = (r.texto.match(/[A-Za-z\u00C0-\u00FF]{3,}/g) || []).length;
+    const nota = r.confianca + letras * 1.5;
+    if (nota > melhor.nota) melhor = { giro, nota };
+  }
+  return melhor.giro ? rotaciona(canvas, melhor.giro) : canvas;
+}
+
+/* ========================================================================== *
+ * 6. Leitura de um documento
+ * ========================================================================== */
+async function textoNativo(doc, pagina){
+  const page = await doc.getPage(pagina);
+  const conteudo = await page.getTextContent();
+  const linhas = [];
+  let atual = [], ultimoY = null;
+  for (const item of conteudo.items){
+    const y = Math.round(item.transform[5]);
+    if (ultimoY !== null && Math.abs(y - ultimoY) > 3){ linhas.push(atual.join(" ")); atual = []; }
+    ultimoY = y;
+    if (item.str.trim()) atual.push(item.str);
+  }
+  if (atual.length) linhas.push(atual.join(" "));
+  return linhas.join("\n");
+}
+
+async function leDocumento(file, cfg, pagina, aoProgredir){
+  const ehPdf = file.name.toLowerCase().endsWith(".pdf");
+  if (!ehPdf){
+    let canvas = await canvasDaImagem(file, cfg.escala);
+    if (cfg.detectarGiro) canvas = await melhorOrientacao(canvas, cfg, aoProgredir);
+    canvas = prepara(canvas, cfg);
+    const r = await ocr(canvas, cfg, aoProgredir);
+    return { texto:r.texto, confianca:r.confianca, origem:"OCR" };
+  }
+
+  const doc = await paginasDoPdf(file);
+  const paginas = pagina != null
+    ? [pagina]
+    : Array.from({length: Math.min(cfg.maxPaginas, doc.numPages)}, (_,i) => i + 1);
+
+  if (!cfg.forcarOcr){
+    const partes = [];
+    for (const p of paginas) partes.push(await textoNativo(doc, p));
+    const nativo = partes.join("\n");
+    if (nativo.trim().length >= MIN_TEXTO_NATIVO)
+      return { texto:nativo, confianca:100, origem:"texto nativo" };
+  }
+
+  const textos = [], confs = [];
+  for (const p of paginas){
+    aoProgredir(`Renderizando página ${p}…`);
+    let canvas = await renderizaPagina(doc, p, cfg.escala);
+    if (cfg.detectarGiro) canvas = await melhorOrientacao(canvas, cfg, aoProgredir);
+    canvas = prepara(canvas, cfg);
+    const r = await ocr(canvas, cfg, aoProgredir);
+    textos.push(r.texto); confs.push(r.confianca);
+  }
+  return {
+    texto: textos.join("\n"),
+    confianca: confs.reduce((a,b)=>a+b,0) / (confs.length || 1),
+    origem: "OCR"
+  };
+}
+
+/* Leitura de UMA página, usada quando o PDF é dividido. Antes de gastar um OCR
+   de página inteira, mede a tinta do cabeçalho: se ele está vazio, basta ler a
+   faixa superior para confirmar que a página é a continuação da anterior. */
+async function lePagina(file, cfg, pagina, aoProgredir, podeAgrupar){
+  const ehPdf = file.name.toLowerCase().endsWith(".pdf");
+
+  if (ehPdf && !cfg.forcarOcr){
+    const doc = await paginasDoPdf(file);
+    const nativo = await textoNativo(doc, pagina);
+    if (nativo.trim().length >= MIN_TEXTO_NATIVO)
+      return { texto:nativo, confianca:100, origem:"texto nativo", continuacao:false };
+  }
+
+  aoProgredir(`Renderizando página ${pagina}…`);
+  let canvas = ehPdf
+    ? await renderizaPagina(await paginasDoPdf(file), pagina, cfg.escala)
+    : await canvasDaImagem(file, cfg.escala);
+  if (cfg.detectarGiro) canvas = await melhorOrientacao(canvas, cfg, aoProgredir);
+
+  if (podeAgrupar){
+    const densidade = densidadeTopo(canvas);
+    if (densidade < LIMIAR_TOPO){
+      aoProgredir("Verificando se é continuação…");
+      const faixa = prepara(recorteTopo(canvas), cfg);
+      const r = await ocr(faixa, cfg, () => {});
+      if (!MARCAS_DE_IDENTIFICACAO.test(normalizar(r.texto)))
+        return { texto:r.texto, confianca:r.confianca, origem:"OCR",
+                 continuacao:true, densidade };
+    }
+  }
+
+  canvas = prepara(canvas, cfg);
+  const r = await ocr(canvas, cfg, aoProgredir);
+  return { texto:r.texto, confianca:r.confianca, origem:"OCR", continuacao:false };
+}
+
+function defineStatus(ex, confOcr, modelo){
+  if (!(ex.nome && ex.mes && ex.ano)) return STATUS.ERR;
+  // A matrícula só rebaixa o status quando o modelo de nome realmente a usa.
+  if (modelo.indexOf("{MATRICULA}") >= 0 && !ex.matricula) return STATUS.REV;
+  if (ex.pesoNome < 60 || ex.pesoComp < 70 || confOcr < 55) return STATUS.REV;
+  if (ex.matricula && ex.pesoMat < 80) return STATUS.REV;
+  return STATUS.OK;
+}
+
+/* ========================================================================== *
+ * 7. Configuração e lote
+ * ========================================================================== */
+function lerConfig(){
+  return {
+    modelo: $("modelo").value.trim() || "{MATRICULA}_{NOME}_{MM}-{AAAA}",
+    sep: $("separador").value,
+    idioma: $("idioma").value,
+    escala: parseFloat($("escala").value),
+    psm: $("psm").value,
+    maxPaginas: Math.max(1, parseInt($("maxPaginas").value,10) || 1),
+    forcarOcr: $("forcarOcr").checked,
+    corrigirInclinacao: $("corrigirInclinacao").checked,
+    binarizar: $("binarizar").checked,
+    detectarGiro: $("detectarGiro").checked,
+    dividir: $("dividir").checked,
+    agrupar: $("agrupar").checked
+  };
+}
+
+const extensaoDe = (n) => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(i) : ".pdf"; };
+const semExtensao = (n) => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(0,i) : n; };
+
+/* Páginas de um registro, na ordem: a principal seguida das continuações. */
+const paginasDe = (r) =>
+  r.pagina == null ? [] : [r.pagina].concat(r.paginasExtras || []);
+
+function rotuloDe(r){
+  const ps = paginasDe(r);
+  if (!ps.length) return r.file.name;
+  return ps.length > 1
+    ? `${r.file.name} (pág. ${ps[0]}\u2013${ps[ps.length-1]})`
+    : `${r.file.name} (pág. ${ps[0]})`;
+}
+
+function anexaContinuacao(anterior, pagina, texto){
+  anterior.paginasExtras.push(pagina);
+  anterior.texto += `\n\n----- continuação, página ${pagina} -----\n` + (texto || "");
+  const n = anterior.paginasExtras.length;
+  const aviso = `${n} página${n>1?"s":""} de continuação anexada${n>1?"s":""}.`;
+  anterior.avisos = anterior.avisos
+    .filter(a => !/página[s]? de continuação anexada/.test(a))
+    .concat(aviso);
+  paginasAgrupadas++;
+}
+
+async function contaPaginas(file){
+  try { return (await paginasDoPdf(file)).numPages; } catch (e) { return 1; }
+}
+
+/* Chave de uma página já lida, usada para retomar sem repetir trabalho. */
+const chaveTarefa = (file, pagina) => `${file.name}|${file.size}|${pagina ?? "-"}`;
+
+function tarefasJaFeitas(){
+  const feitas = new Set();
+  for (const r of registros){
+    feitas.add(chaveTarefa(r.file, r.pagina));
+    for (const p of r.paginasExtras) feitas.add(chaveTarefa(r.file, p));
+  }
+  return feitas;
+}
+
+async function montaFila(cfg){
+  const tarefas = [];
+  for (const file of arquivos){
+    if (cfg.dividir && file.name.toLowerCase().endsWith(".pdf")){
+      const total = await contaPaginas(file);
+      for (let p = 1; p <= total; p++) tarefas.push({ file, pagina:p });
+    } else tarefas.push({ file, pagina:null });
+  }
+  return tarefas;
+}
+
+/* Grava um cartão na pasta escolhida no instante em que ele fica pronto.
+   É o que garante que um travamento no meio do lote não apague o que já
+   foi feito. Falha aqui nunca interrompe a leitura. */
+async function gravaAgora(reg){
+  if (!pastaDestino || !$("autosave").checked) return;
+  try {
+    const fh = await pastaDestino.getFileHandle(reg.novoNome, { create:true });
+    const w = await fh.createWritable();
+    await w.write(await bytesDoRegistro(reg));
+    await w.close();
+    reg.gravado = true;
+    reg.nomeGravado = reg.novoNome;
+  } catch (e){
+    reg.avisos.push("Não foi possível gravar automaticamente: " + e.message);
+  }
+}
+
+async function processarLote(continuar){
+  const cfg = lerConfig();
+  if (!continuar){ registros = []; paginasAgrupadas = 0; }
+
+  const todas = await montaFila(cfg);
+  const feitas = continuar ? tarefasJaFeitas() : new Set();
+  const tarefas = todas.filter(t => !feitas.has(chaveTarefa(t.file, t.pagina)));
+
+  if (!tarefas.length){
+    $("recadoLeitura").innerHTML =
+      '<div class="recado bom">Nada pendente — todas as páginas já foram lidas.</div>';
+    return;
+  }
+
+  processando = true;
+  ultimoErroLote = "";
+  $("progresso").style.display = "block";
+  $("btnLer").disabled = true;
+  $("btnContinuar").disabled = true;
+  $("recadoLeitura").innerHTML = "";
+
+  let concluidas = 0;
+
+  try {
+    for (let i = 0; i < tarefas.length; i++){
+      const file = tarefas[i].file, pagina = tarefas[i].pagina;
+      const rotulo = pagina ? `${file.name} (pág. ${pagina})` : file.name;
+      const passo = (msg) => {
+        $("barraPreenchida").style.width = (i / tarefas.length * 100) + "%";
+        $("progressoTexto").textContent =
+          `${i+1}/${tarefas.length} — ${rotulo} · ${msg}`;
+      };
+      passo("iniciando");
+
+      // Só dá para anexar se houver um cartão anterior, do mesmo arquivo, válido.
+      const anterior = registros.length ? registros[registros.length-1] : null;
+      const podeAgrupar = cfg.agrupar && pagina != null && anterior &&
+                          anterior.file === file && anterior.status !== STATUS.ERR;
+
+      const reg = {
+        file, pagina, paginasExtras:[],
+        matricula:null, nome:null, mes:null, ano:null, novoNome:"",
+        status:STATUS.ERR, confOcr:0, origemTexto:"", avisos:[], texto:"",
+        gravado:false, nomeGravado:null
+      };
+
+      try {
+        const r = pagina != null
+          ? await lePagina(file, cfg, pagina, passo, podeAgrupar)
+          : await leDocumento(file, cfg, pagina, passo);
+
+        // Continuação detectada pela estrutura, sem gastar OCR da página inteira.
+        if (r.continuacao){
+          anexaContinuacao(anterior, pagina, r.texto);
+          await gravaAgora(anterior);   // regrava o cartão agora completo
+          concluidas++;
+          desenhaTabela();
+          continue;
+        }
+
+        reg.texto = r.texto; reg.confOcr = r.confianca; reg.origemTexto = r.origem;
+        const ex = extrair(r.texto);
+
+        // Rede de segurança: página lida por inteiro que não trouxe nenhum dado
+        // de identificação também é continuação do cartão anterior.
+        if (podeAgrupar && !ex.nome && !ex.matricula && !ex.mes){
+          anexaContinuacao(anterior, pagina, r.texto);
+          await gravaAgora(anterior);
+          concluidas++;
+          desenhaTabela();
+          continue;
+        }
+
+        reg.matricula = ex.matricula;
+        reg.nome = ex.nome; reg.mes = ex.mes; reg.ano = ex.ano;
+        reg.avisos = ex.avisos.slice();
+        reg.status = defineStatus(ex, r.confianca, cfg.modelo);
+        if (!r.texto.trim())
+          reg.avisos.push("Nenhum texto reconhecido — verifique a digitalização.");
+      } catch (e){
+        // Uma página problemática vira uma linha com falha, nunca o fim do lote.
+        reg.avisos.push("Erro ao processar: " + e.message);
+        reg.status = STATUS.ERR;
+      }
+
+      reg.novoNome = montaNome({
+        modelo:cfg.modelo, matricula:reg.matricula, nome:reg.nome,
+        mes:reg.mes, ano:reg.ano, original:semExtensao(file.name),
+        extensao:extensaoDe(file.name), pagina:reg.pagina, sep:cfg.sep
+      });
+      registros.push(reg);
+      aplicaUnicidade(registros);
+      if (reg.status !== STATUS.ERR) await gravaAgora(reg);
+      concluidas++;
+      desenhaTabela();
+    }
+
+    $("barraPreenchida").style.width = "100%";
+    $("progressoTexto").textContent = `${tarefas.length} documento(s) lidos.`;
+    setTimeout(() => { $("progresso").style.display = "none"; }, 2500);
+  } catch (e){
+    // Falha fora do laço por página: preserva tudo que já entrou na tabela.
+    ultimoErroLote = e.message;
+    $("recadoLeitura").innerHTML =
+      `<div class="recado ruim">Processamento interrompido em
+       ${concluidas}/${tarefas.length}: ${e.message}<br>
+       Os ${registros.length} cartão(ões) já lidos continuam na tabela — use
+       <b>Continuar de onde parou</b> para retomar sem refazer o que está pronto.
+       </div>`;
+  } finally {
+    processando = false;
+    liberaCacheLeitura();       // devolve a memória do PDF aberto
+    aplicaUnicidade(registros);
+    $("btnLer").disabled = arquivos.length === 0;
+    $("btnContinuar").disabled = false;
+    desenhaTabela();
+  }
+}
+
+/* ========================================================================== *
+ * 8. Interface
+ * ========================================================================== */
+function atualizaExemplo(){
+  const cfg = lerConfig();
+  $("exemploNome").innerHTML = "Exemplo: <b style='color:var(--indigo)'>" + montaNome({
+    modelo:cfg.modelo, matricula:"004512", nome:"João da Silva Souza",
+    mes:5, ano:2026, original:"scan001", extensao:".pdf", pagina:1, sep:cfg.sep
+  }) + "</b>";
+}
+
+$("marcadores").innerHTML = Object.keys(MARCADORES)
+  .map(k => `<span class="marcador" data-m="${k}" title="${MARCADORES[k]}">${k}</span>`).join("");
+$("marcadores").addEventListener("click", (e) => {
+  const m = e.target.dataset ? e.target.dataset.m : null;
+  if (!m) return;
+  const campo = $("modelo");
+  const ini = campo.selectionStart == null ? campo.value.length : campo.selectionStart;
+  const fim = campo.selectionEnd == null ? ini : campo.selectionEnd;
+  campo.value = campo.value.slice(0,ini) + m + campo.value.slice(fim);
+  campo.dispatchEvent(new Event("input"));
+  campo.focus();
+});
+
+function atualizaLista(){
+  $("btnLer").disabled = arquivos.length === 0;
+  $("listaArquivos").textContent = arquivos.length
+    ? `${arquivos.length} arquivo(s) na fila: ` +
+      arquivos.slice(0,4).map(f=>f.name).join(", ") +
+      (arquivos.length > 4 ? ` e mais ${arquivos.length-4}` : "")
+    : "";
+}
+
+const competenciaDe = (r) =>
+  (r.mes && r.ano) ? `${String(r.mes).padStart(2,"0")}/${r.ano}` : "";
+
+function contagem(){
+  const c = {};
+  c[STATUS.OK] = 0; c[STATUS.REV] = 0; c[STATUS.ERR] = 0;
+  registros.forEach(r => c[r.status]++);
+  return c;
+}
+
+function desenhaTabela(){
+  const area = $("areaTabela");
+  if (!registros.length){
+    area.innerHTML = '<div class="vazio">Nenhum documento lido ainda.</div>';
+    $("placar").hidden = true; $("notaTabela").hidden = true; $("etapaSaida").hidden = true;
+    return;
+  }
+
+  const c = contagem();
+  $("placar").hidden = false;
+  $("placar").innerHTML =
+    `<div class="pastilha p-total"><b>${registros.length}</b><span>Documentos</span></div>
+     <div class="pastilha p-ok"><b>${c[STATUS.OK]}</b><span>Prontos</span></div>
+     <div class="pastilha p-rev"><b>${c[STATUS.REV]}</b><span>Revisar</span></div>
+     <div class="pastilha p-err"><b>${c[STATUS.ERR]}</b><span>Falhas</span></div>`;
+
+  const linhas = registros.map((r,i) => `
+    <tr class="${CLASSE[r.status]}">
+      <td class="origem" title="${rotuloDe(r)}">${rotuloDe(r)}</td>
+      <td><input type="text" data-campo="mat" data-i="${i}" style="width:96px"
+                 value="${r.matricula||""}" placeholder="Matrícula"></td>
+      <td><input type="text" data-campo="nome" data-i="${i}" style="min-width:170px"
+                 value="${(r.nome||"").replace(/"/g,"&quot;")}" placeholder="Nome do funcionário"></td>
+      <td><input type="text" data-campo="comp" data-i="${i}" style="width:96px"
+                 value="${competenciaDe(r)}" placeholder="MM/AAAA"></td>
+      <td class="novo">${r.novoNome}</td>
+      <td><span class="carimbo ${CLASSE[r.status]}">${r.status}</span>
+        ${r.gravado ? '<div class="salvo">salvo em disco</div>' : ''}</td>
+      <td style="font-variant-numeric:tabular-nums">${Math.round(r.confOcr)}%</td>
+      <td class="avisos">${r.avisos.join(" · ") || "—"}
+        <br><button class="linkTexto" data-texto="${i}">ver texto lido</button></td>
+    </tr>`).join("");
+
+  area.innerHTML = `<div class="rolagem"><table>
+    <thead><tr>
+      <th>Origem</th><th>Matrícula</th><th>Funcionário</th><th>Competência</th>
+      <th>Novo nome</th><th>Status</th><th>OCR</th><th>Avisos</th>
+    </tr></thead><tbody>${linhas}</tbody></table></div>`;
+
+  $("notaTabela").hidden = false;
+  $("btnContinuar").hidden = registros.length === 0;
+  $("notaAgrupamento").hidden = paginasAgrupadas === 0;
+  if (paginasAgrupadas)
+    $("notaAgrupamento").innerHTML =
+      `<b>${paginasAgrupadas}</b> página(s) sem identificação foram anexadas ao ` +
+      `cartão anterior — esses espelhos saem com todas as páginas em um só arquivo.`;
+  $("etapaSaida").hidden = false;
+  desenhaPendencias();
+}
+
+function desenhaPendencias(){
+  const pend = registros.filter(r => r.status !== STATUS.OK);
+  $("pendencias").innerHTML = pend.length
+    ? `<div class="painel teal"><b style="color:var(--turquesa)">Documentos que exigem atenção</b>
+        <ul style="margin:10px 0 0;padding-left:20px;font-size:.88rem">${
+          pend.map(r => `<li><b>${rotuloDe(r)}</b> — ${r.status}: ${
+            r.avisos.join(" · ") || "confiança baixa no reconhecimento"}</li>`).join("")
+        }</ul></div>`
+    : `<div class="recado bom">Todos os documentos foram reconhecidos com confiança alta.</div>`;
+}
+
+function recalcula(i){
+  const cfg = lerConfig(), r = registros[i];
+  r.novoNome = montaNome({
+    modelo:cfg.modelo, matricula:r.matricula, nome:r.nome, mes:r.mes, ano:r.ano,
+    original:semExtensao(r.file.name), extensao:extensaoDe(r.file.name),
+    pagina:r.pagina, sep:cfg.sep
+  });
+  const faltaMat = cfg.modelo.indexOf("{MATRICULA}") >= 0 && !r.matricula;
+  r.status = !(r.nome && r.mes && r.ano) ? STATUS.ERR
+           : faltaMat ? STATUS.REV : STATUS.OK;
+}
+
+$("areaTabela").addEventListener("input", (e) => {
+  const alvo = e.target;
+  if (alvo.tagName !== "INPUT") return;
+  const i = +alvo.dataset.i, r = registros[i];
+
+  if (alvo.dataset.campo === "mat"){
+    const v = alvo.value.replace(/[^\d]/g,"");
+    r.matricula = v || null;
+  } else if (alvo.dataset.campo === "nome"){
+    r.nome = alvo.value.trim() || null;
+  } else {
+    const m = alvo.value.trim().match(/^(\d{1,2})\s*[\/\-.]\s*(\d{4})$/);
+    if (m && +m[1] >= 1 && +m[1] <= 12){ r.mes = +m[1]; r.ano = +m[2]; }
+    else { r.mes = null; r.ano = null; }
+  }
+
+  recalcula(i);
+  aplicaUnicidade(registros);
+
+  // Atualiza só o necessário, para não perder o foco de digitação.
+  const tr = alvo.closest("tr");
+  tr.className = CLASSE[r.status];
+  tr.querySelector("td.novo").textContent = r.novoNome;
+  const carimbo = tr.querySelector(".carimbo");
+  carimbo.className = "carimbo " + CLASSE[r.status];
+  carimbo.textContent = r.status;
+  const c = contagem(), b = $("placar").querySelectorAll("b");
+  b[1].textContent = c[STATUS.OK];
+  b[2].textContent = c[STATUS.REV];
+  b[3].textContent = c[STATUS.ERR];
+  desenhaPendencias();
+});
+
+$("areaTabela").addEventListener("click", (e) => {
+  const i = e.target.dataset ? e.target.dataset.texto : undefined;
+  if (i === undefined) return;
+  const r = registros[+i];
+  $("modalTitulo").textContent = rotuloDe(r);
+  $("modalCorpo").textContent =
+    `Fonte: ${r.origemTexto || "não lido"} · confiança ${Math.round(r.confOcr)}%\n` +
+    "\u2500".repeat(48) + "\n" + (r.texto || "(vazio)");
+  $("modalTexto").showModal();
+});
+
+const solte = $("solte");
+["dragenter","dragover"].forEach(ev =>
+  solte.addEventListener(ev, e => { e.preventDefault(); solte.classList.add("ativo"); }));
+["dragleave","drop"].forEach(ev =>
+  solte.addEventListener(ev, e => { e.preventDefault(); solte.classList.remove("ativo"); }));
+solte.addEventListener("drop", e => adiciona(e.dataTransfer.files));
+solte.addEventListener("click", () => $("entrada").click());
+$("entrada").addEventListener("change", e => { adiciona(e.target.files); e.target.value = ""; });
+
+function adiciona(lista){
+  for (const f of lista){
+    const ext = f.name.split(".").pop().toLowerCase();
+    if (EXTENSOES.indexOf(ext) >= 0 &&
+        !arquivos.some(a => a.name === f.name && a.size === f.size))
+      arquivos.push(f);
+  }
+  atualizaLista();
+}
+
+$("btnLimpar").addEventListener("click", () => {
+  arquivos = []; registros = [];
+  atualizaLista(); desenhaTabela();
+  $("recadoLeitura").innerHTML = "";
+});
+
+$("btnLer").addEventListener("click", () => processarLote(false));
+$("btnContinuar").addEventListener("click", () => processarLote(true));
+
+$("btnPastaDestino").addEventListener("click", async () => {
+  if (!("showDirectoryPicker" in window)){
+    $("pastaEscolhida").textContent =
+      "este navegador não grava direto em pasta — use o .zip ao final";
+    return;
+  }
+  try {
+    pastaDestino = await window.showDirectoryPicker({ mode:"readwrite" });
+    $("pastaEscolhida").innerHTML =
+      `gravando em <b>${pastaDestino.name}</b> a cada cartão pronto`;
+  } catch (e){
+    if (e.name !== "AbortError")
+      $("pastaEscolhida").textContent = "não foi possível abrir a pasta: " + e.message;
+  }
+});
+
+// Impede fechar ou recarregar a aba com trabalho ainda não gravado em disco.
+window.addEventListener("beforeunload", (e) => {
+  const naoGravados = registros.filter(r => !r.gravado).length;
+  if (processando || naoGravados){
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+
+["modelo","separador"].forEach(id => $(id).addEventListener("input", () => {
+  atualizaExemplo();
+  if (registros.length){
+    registros.forEach((_,i) => recalcula(i));
+    aplicaUnicidade(registros);
+    desenhaTabela();
+  }
+}));
+atualizaExemplo();
+
+/* ========================================================================== *
+ * 9. Relatórios e gravação
+ * ========================================================================== */
+async function bytesDoRegistro(r){
+  if (r.pagina == null) return new Uint8Array(await r.file.arrayBuffer());
+  const origem = await pdfParaEscrita(r.file);
+  const saida = await PDFLib.PDFDocument.create();
+  // O cartão sai inteiro: a página do cabeçalho e as de continuação.
+  const indices = paginasDe(r).map(p => p - 1);
+  const copiadas = await saida.copyPages(origem, indices);
+  copiadas.forEach(p => saida.addPage(p));
+  return await saida.save();
+}
+
+function selecionados(){
+  const incluirFalhas = $("incluirFalhas").checked;
+  return registros.filter(r => incluirFalhas || r.status !== STATUS.ERR);
+}
+
+const CABECALHO = ["Arquivo de origem","Páginas","Qtd. páginas","Matrícula","Funcionário",
+                   "Competência","Novo nome","Status","Confiança OCR","Origem do texto","Avisos"];
+
+function linhasRelatorio(){
+  return registros.map(r => {
+    const ps = paginasDe(r);
+    return [
+      r.file.name,
+      ps.length ? ps.join(", ") : "",
+      ps.length || 1,
+      r.matricula || "", r.nome || "", competenciaDe(r), r.novoNome, r.status,
+      Math.round(r.confOcr) + "%", r.origemTexto, r.avisos.join(" | ")
+    ];
+  });
+}
+
+function relatorioCsv(){
+  const esc = (v) => '"' + String(v == null ? "" : v).replace(/"/g,'""') + '"';
+  return "\uFEFF" + [CABECALHO].concat(linhasRelatorio())
+    .map(l => l.map(esc).join(";")).join("\r\n");
+}
+
+function relatorioXlsx(){
+  const dados = [CABECALHO].concat(linhasRelatorio());
+  const ws = XLSX.utils.aoa_to_sheet(dados);
+  ws["!cols"] = [{wch:26},{wch:12},{wch:12},{wch:12},{wch:30},{wch:12},
+                 {wch:38},{wch:10},{wch:13},{wch:14},{wch:42}];
+  ws["!autofilter"] = { ref: XLSX.utils.encode_range({
+    s:{r:0,c:0}, e:{r:dados.length-1, c:CABECALHO.length-1} }) };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Cartões de ponto");
+
+  const c = contagem();
+  const resumo = XLSX.utils.aoa_to_sheet([
+    ["Resumo do processamento"],
+    ["Gerado em", new Date().toLocaleString("pt-BR")],
+    [],
+    ["Cartões gerados", registros.length],
+    ["Prontos", c[STATUS.OK]],
+    ["Para revisar", c[STATUS.REV]],
+    ["Falhas de leitura", c[STATUS.ERR]],
+    [],
+    ["Páginas de continuação agrupadas", paginasAgrupadas],
+    ["Total de páginas lidas", registros.reduce(
+        (s,r) => s + (paginasDe(r).length || 1), 0)],
+    [],
+    ["Modelo de nome", $("modelo").value]
+  ]);
+  resumo["!cols"] = [{wch:22},{wch:36}];
+  XLSX.utils.book_append_sheet(wb, resumo, "Resumo");
+
+  return XLSX.write(wb, { bookType:"xlsx", type:"array" });
+}
+
+function baixaBlob(blob, nome){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = nome; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+const carimboData = () => new Date().toISOString().slice(0,16).replace(/[-:T]/g,"");
+
+function recado(html, bom){
+  $("recadoSaida").innerHTML =
+    `<div class="recado ${bom === false ? "ruim" : "bom"}">${html}</div>`;
+}
+
+$("btnExcel").addEventListener("click", () => {
+  try {
+    baixaBlob(new Blob([relatorioXlsx()],
+      { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      `relatorio_ponto_${carimboData()}.xlsx`);
+    recado("Planilha gerada com as abas <b>Cartões de ponto</b> e <b>Resumo</b>.");
+  } catch (e){ recado("Erro ao gerar a planilha: " + e.message, false); }
+});
+
+$("btnCsv").addEventListener("click", () => {
+  baixaBlob(new Blob([relatorioCsv()], { type:"text/csv;charset=utf-8" }),
+            `relatorio_ponto_${carimboData()}.csv`);
+});
+
+$("btnZip").addEventListener("click", async () => {
+  const lista = selecionados();
+  if (!lista.length){ recado("Nada para gravar.", false); return; }
+  $("btnZip").disabled = true;
+  try {
+    const zip = new JSZip();
+    for (const r of lista) zip.file(r.novoNome, await bytesDoRegistro(r));
+    zip.file("relatorio.xlsx", relatorioXlsx());
+    zip.file("relatorio.csv", relatorioCsv());
+    const blob = await zip.generateAsync({ type:"blob", compression:"DEFLATE" });
+    baixaBlob(blob, `cartoes_ponto_${carimboData()}.zip`);
+    recado(`${lista.length} arquivo(s) no .zip, com os relatórios em Excel e CSV.`);
+  } catch (e){ recado("Erro ao compactar: " + e.message, false); }
+  $("btnZip").disabled = false;
+});
+
+const temApiPasta = "showDirectoryPicker" in window;
+$("notaPasta").textContent = temApiPasta
+  ? "Salvar em pasta grava direto no disco, junto com os relatórios em Excel e CSV."
+  : "Este navegador não permite gravar direto em uma pasta. Use o .zip — no Chrome ou Edge a opção de pasta fica disponível.";
+$("btnPasta").disabled = !temApiPasta;
+
+$("btnPasta").addEventListener("click", async () => {
+  const lista = selecionados();
+  if (!lista.length){ recado("Nada para gravar.", false); return; }
+  try {
+    // Reutiliza a pasta da gravação automática, sem perguntar de novo.
+    const dir = pastaDestino || await window.showDirectoryPicker({ mode:"readwrite" });
+    pastaDestino = dir;
+    let gravados = 0, renomeados = 0;
+    const erros = [];
+    const grava = async (nome, conteudo) => {
+      const fh = await dir.getFileHandle(nome, { create:true });
+      const w = await fh.createWritable();
+      await w.write(conteudo); await w.close();
+    };
+    for (const r of lista){
+      try {
+        // Já está no disco com o nome atual? Não reescreve à toa.
+        if (r.gravado && r.nomeGravado === r.novoNome){ gravados++; continue; }
+        await grava(r.novoNome, await bytesDoRegistro(r));
+        // Nome corrigido na tabela: remove o arquivo antigo.
+        if (r.nomeGravado && r.nomeGravado !== r.novoNome){
+          try { await dir.removeEntry(r.nomeGravado); renomeados++; }
+          catch (e2) { /* o arquivo antigo pode já não existir */ }
+        }
+        r.gravado = true; r.nomeGravado = r.novoNome;
+        gravados++;
+      }
+      catch (e){ erros.push(`${rotuloDe(r)}: ${e.message}`); }
+    }
+    await grava("relatorio.xlsx", relatorioXlsx());
+    await grava("relatorio.csv", relatorioCsv());
+    desenhaTabela();
+    recado(`${gravados} arquivo(s) na pasta escolhida, com os relatórios.` +
+           (renomeados ? `<br>${renomeados} arquivo(s) antigos substituídos após correção do nome.` : "") +
+           (erros.length ? "<br>Falhas: " + erros.join("; ") : ""), erros.length === 0);
+  } catch (e){
+    if (e.name !== "AbortError") recado("Não foi possível gravar: " + e.message, false);
+  }
+});
+</script>
+</body>
+</html>
