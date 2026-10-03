@@ -670,9 +670,53 @@ function montaNome(o){
   return r + ext.toLowerCase();
 }
 
+const AVISO_CARTAO_DUPLICADO = "Cartão duplicado: este colaborador já tem um cartão da mesma competência no lote. Não será gerado.";
+const AVISO_NOME_REPETIDO = "Nome de arquivo repetido no lote — sufixo numérico aplicado.";
+
+function identidadeColaborador(r){
+  const matricula = String(r.matricula || "").replace(/\D/g, "");
+  if (matricula) return { tipo:"matricula", valor:matricula };
+  const nome = semAcento(String(r.nome || "").toUpperCase())
+    .replace(/[^A-Z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  return nome ? { tipo:"nome", valor:nome } : null;
+}
+
+function mesmaPessoa(a, b){
+  const ia = identidadeColaborador(a), ib = identidadeColaborador(b);
+  if (!ia || !ib) return false;
+  // Matrícula é o identificador principal. O nome serve de apoio se faltar
+  // matrícula em pelo menos um dos cartões.
+  if (ia.tipo === "matricula" && ib.tipo === "matricula")
+    return ia.valor === ib.valor;
+  const na = identidadeColaborador({ nome:a.nome });
+  const nb = identidadeColaborador({ nome:b.nome });
+  return !!(na && nb && na.valor === nb.valor);
+}
+
+function mesmaCompetencia(a, b){
+  return !!(a.mes && a.ano && b.mes && b.ano &&
+            Number(a.mes) === Number(b.mes) && Number(a.ano) === Number(b.ano));
+}
+
 function aplicaUnicidade(lista){
   const usados = new Set();
+  const anteriores = [];
   for (const r of lista){
+    r.avisos = (r.avisos || []).filter(a =>
+      a !== AVISO_CARTAO_DUPLICADO && a !== AVISO_NOME_REPETIDO);
+    if (r.statusBase) r.status = r.statusBase;
+    r.duplicado = false;
+    if (r.nomeBase) r.novoNome = r.nomeBase;
+
+    const duplicadoDe = anteriores.find(a => mesmaPessoa(a, r) && mesmaCompetencia(a, r));
+    if (duplicadoDe){
+      r.duplicado = true;
+      r.status = STATUS.ERR;
+      r.avisos.push(`${AVISO_CARTAO_DUPLICADO} Competência: ${competenciaDe(r)}.`);
+      continue;
+    }
+    anteriores.push(r);
+
     if (!r.novoNome) continue;
     let nome = r.novoNome;
     if (usados.has(nome)){
@@ -681,8 +725,7 @@ function aplicaUnicidade(lista){
       let n = 2;
       while (usados.has(`${base}_${n}${ext}`)) n++;
       nome = `${base}_${n}${ext}`;
-      if (!r.avisos.includes("Nome duplicado no lote — sufixo numérico aplicado."))
-        r.avisos.push("Nome duplicado no lote — sufixo numérico aplicado.");
+      r.avisos.push(AVISO_NOME_REPETIDO);
     }
     r.novoNome = nome;
     usados.add(nome);
@@ -1133,7 +1176,7 @@ async function montaFila(cfg){
    É o que garante que um travamento no meio do lote não apague o que já
    foi feito. Falha aqui nunca interrompe a leitura. */
 async function gravaAgora(reg){
-  if (!pastaDestino || !$("autosave").checked) return;
+  if (reg.duplicado || !pastaDestino || !$("autosave").checked) return;
   try {
     const fh = await pastaDestino.getFileHandle(reg.novoNome, { create:true });
     const w = await fh.createWritable();
@@ -1188,7 +1231,8 @@ async function processarLote(continuar){
       const reg = {
         file, pagina, paginasExtras:[],
         matricula:null, nome:null, mes:null, ano:null, novoNome:"",
-        status:STATUS.ERR, confOcr:0, origemTexto:"", avisos:[], texto:"",
+        status:STATUS.ERR, statusBase:STATUS.ERR, duplicado:false,
+        confOcr:0, origemTexto:"", avisos:[], texto:"",
         gravado:false, nomeGravado:null
       };
 
@@ -1223,12 +1267,14 @@ async function processarLote(continuar){
         reg.nome = ex.nome; reg.mes = ex.mes; reg.ano = ex.ano;
         reg.avisos = ex.avisos.slice();
         reg.status = defineStatus(ex, r.confianca, cfg.modelo);
+        reg.statusBase = reg.status;
         if (!r.texto.trim())
           reg.avisos.push("Nenhum texto reconhecido — verifique a digitalização.");
       } catch (e){
         // Uma página problemática vira uma linha com falha, nunca o fim do lote.
         reg.avisos.push("Erro ao processar: " + e.message);
         reg.status = STATUS.ERR;
+        reg.statusBase = STATUS.ERR;
       }
 
       reg.novoNome = montaNome({
@@ -1236,9 +1282,10 @@ async function processarLote(continuar){
         mes:reg.mes, ano:reg.ano, original:semExtensao(file.name),
         extensao:extensaoDe(file.name), pagina:reg.pagina, sep:cfg.sep
       });
+      reg.nomeBase = reg.novoNome;
       registros.push(reg);
       aplicaUnicidade(registros);
-      if (reg.status !== STATUS.ERR) await gravaAgora(reg);
+      if (reg.status !== STATUS.ERR && !reg.duplicado) await gravaAgora(reg);
       concluidas++;
       desenhaTabela();
     }
@@ -1379,6 +1426,8 @@ function recalcula(i){
   const faltaMat = cfg.modelo.indexOf("{MATRICULA}") >= 0 && !r.matricula;
   r.status = !(r.nome && r.mes && r.ano) ? STATUS.ERR
            : faltaMat ? STATUS.REV : STATUS.OK;
+  r.statusBase = r.status;
+  r.nomeBase = r.novoNome;
 }
 
 $("areaTabela").addEventListener("input", (e) => {
@@ -1504,7 +1553,8 @@ async function bytesDoRegistro(r){
 
 function selecionados(){
   const incluirFalhas = $("incluirFalhas").checked;
-  return registros.filter(r => incluirFalhas || r.status !== STATUS.ERR);
+  // Duplicados são sempre excluídos, inclusive quando a opção de falhas está ativa.
+  return registros.filter(r => !r.duplicado && (incluirFalhas || r.status !== STATUS.ERR));
 }
 
 const CABECALHO = ["Arquivo de origem","Páginas","Qtd. páginas","Matrícula","Funcionário",
